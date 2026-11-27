@@ -10,10 +10,11 @@ import pandas as pd
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import ProgrammingError
 
+# Rutas del DAG: todo vive dentro de dags/northwind/
 BASE_DIR = Path(__file__).resolve().parent
-IN_DIR = BASE_DIR / "IN"
-OUTPUT_DIR = BASE_DIR / "output"
-DEFAULT_PG_DSN = "postgresql+psycopg2://postgres:Mauricio06@172.22.96.1:5432/northwind"
+IN_DIR = BASE_DIR / "data"  # CSV de entrada
+OUTPUT_DIR = BASE_DIR / "output"  # artefactos generados (ignorado en git)
+PG_DSN_ENV_VAR = "PG_DSN"  # variable de entorno con la cadena de conexión a PostgreSQL
 
 EXPECTED_COUNTS = {
     "orders.csv": 830,
@@ -53,9 +54,6 @@ def resolve_input_path(file_name: str) -> Path:
     candidate = IN_DIR / file_name
     if candidate.exists():
         return candidate
-    project_candidate = BASE_DIR / file_name
-    if project_candidate.exists():
-        return project_candidate
     return candidate
 
 
@@ -130,8 +128,8 @@ def extract_raw_files() -> dict[str, pd.DataFrame]:
     logger = setup_logging()
     frames = {}
     for file_name in sorted(EXPECTED_COUNTS.keys()):
-        df = load_csv(BASE_DIR / file_name)
-        frames[file_name.replace(".csv", "")] = df
+        df = load_csv(IN_DIR / file_name)
+        frames[file_name.replace(".csv", "").replace("-", "_")] = df  # order-details -> order_details
     logger.info("Raw extraction completed for %s files", len(frames))
     return frames
 
@@ -217,8 +215,10 @@ def save_outputs(df_map: dict[str, pd.DataFrame], output_dir: Path) -> None:
 
 
 def load_to_postgres(df_map: dict[str, pd.DataFrame], audit_rows: list[dict], batch_id: str) -> None:
-    dsn = os.getenv("PG_DSN", DEFAULT_PG_DSN)
-    os.environ["PG_DSN"] = dsn
+    # La conexión se lee del entorno para no guardar contraseñas en el código
+    dsn = os.getenv(PG_DSN_ENV_VAR)
+    if not dsn:
+        raise RuntimeError(f"Define la variable de entorno {PG_DSN_ENV_VAR} (ver .env.example)")
 
     engine = create_engine(dsn)
     key_map = {
