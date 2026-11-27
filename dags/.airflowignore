@@ -1,0 +1,7 @@
+# Carpetas que el scheduler de Airflow no necesita escanear
+data/
+output/
+sql/
+notebooks/
+__pycache__/
+_template/

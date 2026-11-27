@@ -1,21 +1,16 @@
 from __future__ import annotations
 
 import json
-import sys
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 from airflow import DAG
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
 
-from etl_pipeline import (
+# Airflow agrega la carpeta dags/ al sys.path, así que el paquete "northwind" se importa directo
+from northwind.etl_pipeline import (
     OUTPUT_DIR,
     check_input_directory,
     extract_raw_files,

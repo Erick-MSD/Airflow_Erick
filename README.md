@@ -1,160 +1,96 @@
-# Northwind ETL with Airflow and PostgreSQL
+# Pipelines de Airflow
 
-This project processes the Northwind CSV files using Python and Airflow, cleans and validates the data, creates analytical tables, saves versioned artifacts, and loads the results into PostgreSQL.
+Repositorio para desarrollar pipelines de datos con Apache Airflow. Cada DAG vive en su propia carpeta dentro de `dags/`, con su código, datos de entrada, SQL y notebooks.
 
-## Architecture
+## Estructura
 
-- `IN/`: input CSV files.
-- `etl_pipeline.py`: ETL, validation, transformation, output, and PostgreSQL loading logic.
-- `dags/northwind_postgres_dag.py`: Airflow DAG definition.
-- `sql/northwind_postgres_schema.sql`: PostgreSQL table definitions.
-- `sql/northwind_queries.sql`: analytical SQL queries.
-- `output/`: versioned output and Airflow staging files.
-- `start_airflow.sh`: Bash script for starting, stopping, and checking Airflow.
-
-The DAG runs these tasks in order:
-
-1. `check_input_directory`: verifies the required files.
-2. `extract_raw_files`: reads and validates the five CSV files.
-3. `transform_and_validate`: cleans values, detects invalid rows, joins datasets, and creates analytical tables.
-4. `save_output_files`: saves versioned CSV artifacts.
-5. `load_postgres`: inserts transformed data and audit records into PostgreSQL.
-
-Airflow runs inside Ubuntu on WSL2. PostgreSQL runs on Windows and is accessed from WSL through the configured gateway address.
-
-## Requirements
-
-```bash
-python -m pip install "apache-airflow==2.9.3" pandas sqlalchemy psycopg2-binary
+```
+.
+├── airflow/                  # Configuración y arranque de Airflow (AIRFLOW_HOME)
+│   ├── airflow.cfg
+│   ├── webserver_config.py
+│   └── start_airflow.sh      # start | stop | status
+├── dags/                     # Carpeta de DAGs que lee Airflow
+│   ├── .airflowignore
+│   ├── _template/            # Plantilla para crear un DAG nuevo (Airflow la ignora)
+│   └── northwind/            # DAG: northwind_postgres_pipeline
+│       ├── northwind_postgres_dag.py
+│       ├── etl_pipeline.py
+│       ├── data/             # CSV de entrada
+│       ├── sql/              # Esquema y consultas de PostgreSQL
+│       ├── notebooks/        # Análisis de los resultados
+│       └── output/           # Generado al correr (no se sube a git)
+├── plugins/                  # Plugins compartidos de Airflow
+├── requirements.txt
+└── .env.example              # Variables locales (copiar a .env)
 ```
 
-Required components:
+Al correr Airflow se generan `airflow/airflow.db`, `airflow/logs/` y `airflow/.airflow-pids/`. Esos archivos son estado local y están en `.gitignore`.
 
-- Windows 10 or Windows 11 with WSL2.
-- Ubuntu 22.04 in WSL2.
-- Python 3.10 or newer inside Ubuntu.
-- Apache Airflow 2.9.3 in a Linux virtual environment.
-- PostgreSQL running on Windows.
-- A PostgreSQL database named `northwind`.
+## Instalación (Ubuntu / WSL2)
 
-The virtual environment must be created inside the Linux filesystem, for example `/home/ubuntu/northwind_project/.venv`. Do not run Airflow with a Windows virtual environment under `/mnt/c`.
-
-## PostgreSQL Configuration
-
-The ETL reads `PG_DSN` when it is defined. Otherwise, it uses the default DSN in `etl_pipeline.py`.
+Crea el entorno virtual en la raíz del repositorio, dentro del sistema de archivos de Linux (no en `/mnt/c` ni en OneDrive):
 
 ```bash
-export PG_DSN="postgresql+psycopg2://user:password@host:5432/northwind"
-```
-
-When PostgreSQL runs on Windows and Airflow runs in WSL2, PostgreSQL must allow the WSL subnet in `pg_hba.conf`, and Windows Firewall must allow inbound TCP traffic on port `5432` from that subnet.
-
-## Initial Setup
-
-```bash
-cd /home/ubuntu/northwind_project
 python3 -m venv .venv
+```
+
+```bash
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install "apache-airflow==2.9.3" pandas sqlalchemy psycopg2-binary
 ```
-
-Create the database tables by running `sql/northwind_postgres_schema.sql` against the `northwind` database if they do not exist yet.
-
-## Start Airflow with Bash
-
-Make the script executable once:
 
 ```bash
-chmod +x start_airflow.sh
+python -m pip install -r requirements.txt
 ```
 
-Start Airflow:
+Crea tu archivo de variables y edítalo con tus credenciales:
 
 ```bash
-./start_airflow.sh start
+cp .env.example .env
 ```
 
-The script sets `AIRFLOW_HOME`, selects the project DAG folder, disables example DAGs, uses `SequentialExecutor`, runs `airflow db migrate`, and starts the scheduler and webserver in the background. Logs are written to `logs/` and process IDs to `.airflow-pids/`.
-
-Open the UI at `http://localhost:8080`.
-
-Useful commands:
+## Iniciar Airflow
 
 ```bash
-./start_airflow.sh status
-./start_airflow.sh stop
-tail -f logs/scheduler.log
-tail -f logs/webserver.log
+./airflow/start_airflow.sh start
 ```
 
-## Airflow User
-
-Create an administrator account once, if necessary:
+El script define `AIRFLOW_HOME=airflow/`, apunta a `dags/` y `plugins/`, carga `.env`, desactiva los DAGs de ejemplo, ejecuta `airflow db migrate` y levanta el scheduler y el webserver en segundo plano. La interfaz queda en `http://localhost:8080`.
 
 ```bash
-airflow users create \
-	--username admin \
-	--firstname Admin \
-	--lastname User \
-	--role Admin \
-	--email admin@example.com
+./airflow/start_airflow.sh status
 ```
-
-Airflow asks for the password interactively. Do not store the password in this README or in the Bash script.
-
-## Run the DAG
-
-1. Run `./start_airflow.sh start`.
-2. Open `http://localhost:8080` and sign in.
-3. Enable `northwind_postgres_pipeline`.
-4. Trigger a manual run.
-5. Review each task in the Graph or Grid view.
-
-## Run Without Airflow
 
 ```bash
-python etl_pipeline.py
+./airflow/start_airflow.sh stop
 ```
-
-## Data Quality Rules
-
-- expected row-count validation for all five source files;
-- explicit handling of `order-details.csv`;
-- cleanup of literal `NULL` values;
-- detection of country values that resemble postal codes;
-- `batch_id` and execution timestamps;
-- an `audit_invalid_rows` table;
-- versioned output files;
-- structured logging.
-
-## PostgreSQL Tables
-
-- `fact_orders`
-- `agg_sales_by_country`
-- `agg_sales_by_category`
-- `audit_invalid_rows`
-
-The schema also contains raw and cleaned tables used by the pipeline.
-
-## Troubleshooting
-
-### `python: command not found`
-
-Activate the Linux virtual environment:
 
 ```bash
-source /home/ubuntu/northwind_project/.venv/bin/activate
+tail -f airflow/logs/scheduler.log
 ```
 
-### `connection refused` on port `5432`
+Para usar el CLI de `airflow` directamente en tu terminal, exporta las mismas rutas:
 
-Check that PostgreSQL is running on Windows, that port `5432` is listening, and that `pg_hba.conf` and Windows Firewall allow connections from WSL2.
+```bash
+export AIRFLOW_HOME="$PWD/airflow" AIRFLOW_PROJECT_DIR="$PWD"
+```
 
-### `Engine object has no attribute cursor`
+Crear un usuario administrador (pide la contraseña de forma interactiva):
 
-Use the current `etl_pipeline.py`, which uses SQLAlchemy connections for PostgreSQL reads and inserts.
+```bash
+airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com
+```
 
-### A task is marked as a zombie
+## Agregar un DAG nuevo
 
-Run Airflow from the native Linux project and virtual environment. Avoid running the Airflow runtime from `/mnt/c` or a synchronized OneDrive folder.
+```bash
+cp -r dags/_template dags/mi_pipeline
+```
+
+Después sigue los pasos de `dags/_template/README.md`: renombrar el archivo del DAG, cambiar el `dag_id` y el import (`from mi_pipeline.pipeline import ...`).
+
+## Pipelines
+
+| Carpeta | DAG | Descripción |
+| --- | --- | --- |
+| [`dags/northwind`](dags/northwind/README.md) | `northwind_postgres_pipeline` | ETL de los CSV de Northwind hacia PostgreSQL |

@@ -1,10 +1,20 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# airflow/ guarda la configuración; la raíz del repo tiene dags/, plugins/ y .venv/
+AIRFLOW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "${AIRFLOW_DIR}")"
 VENV_DIR="${PROJECT_DIR}/.venv"
-LOG_DIR="${PROJECT_DIR}/logs"
-PID_DIR="${PROJECT_DIR}/.airflow-pids"
+LOG_DIR="${AIRFLOW_DIR}/logs"
+PID_DIR="${AIRFLOW_DIR}/.airflow-pids"
+ENV_FILE="${PROJECT_DIR}/.env"
+
+# Carga variables locales (por ejemplo PG_DSN) si existe el archivo .env
+if [[ -f "${ENV_FILE}" ]]; then
+    set -a
+    source "${ENV_FILE}"
+    set +a
+fi
 
 if [[ ! -x "${VENV_DIR}/bin/airflow" ]]; then
     echo "Airflow was not found at ${VENV_DIR}/bin/airflow."
@@ -12,11 +22,13 @@ if [[ ! -x "${VENV_DIR}/bin/airflow" ]]; then
     exit 1
 fi
 
-export AIRFLOW_HOME="${PROJECT_DIR}"
+export AIRFLOW_HOME="${AIRFLOW_DIR}"
+export AIRFLOW_PROJECT_DIR="${PROJECT_DIR}"
 export AIRFLOW__CORE__DAGS_FOLDER="${PROJECT_DIR}/dags"
+export AIRFLOW__CORE__PLUGINS_FOLDER="${PROJECT_DIR}/plugins"
 export AIRFLOW__CORE__LOAD_EXAMPLES="False"
 export AIRFLOW__CORE__EXECUTOR="SequentialExecutor"
-export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="sqlite:////${PROJECT_DIR#/}/airflow.db"
+export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="sqlite:////${AIRFLOW_DIR#/}/airflow.db"
 
 mkdir -p "${LOG_DIR}" "${PID_DIR}"
 

@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Airflow (estado local generado al ejecutar)
+airflow/airflow.db
+airflow/logs/
+airflow/.airflow-pids/
+airflow/*.pid
+airflow/standalone_admin_password.txt
+
+# Artefactos generados por los DAGs
+dags/*/output/
